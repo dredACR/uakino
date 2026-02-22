@@ -8,14 +8,14 @@
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
                 var render = e.object.render();
-                
-                // Перевірка, щоб не дублювати кнопку
-                if (render[0].querySelector('.view--uakino')) return;
+                var html_node = render[0];
 
-                // Створюємо кнопку у стилі вашого нового інтерфейсу
+                // Перевірка, щоб не дублювати
+                if (html_node.querySelector('.view--uakino')) return;
+
+                // Створюємо кнопку вручну (без jQuery)
                 var btn = document.createElement('div');
                 btn.className = 'full-start__button selector view--uakino';
-                // Додаємо стиль, щоб вона виглядала як сусідні кнопки
                 btn.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
                 btn.style.borderRadius = '12px';
                 btn.style.marginLeft = '10px';
@@ -23,8 +23,10 @@
                 btn.style.display = 'flex';
                 btn.style.alignItems = 'center';
                 btn.style.height = '3.5rem';
+                btn.style.cursor = 'pointer';
                 btn.innerHTML = '<span style="font-weight: 500;">UAKino</span>';
 
+                // Логіка пошуку
                 btn.addEventListener('click', function () {
                     var title = e.data.movie.title || e.data.movie.name;
                     Lampa.Loading.start();
@@ -33,7 +35,7 @@
                     
                     network.native(search_url, function (html) {
                         Lampa.Loading.stop();
-                        // Шукаємо посилання на сторінку фільму
+                        // Шукаємо посилання на фільм у HTML
                         var match = html.match(/class="movie-title"><a href="(https:\/\/uakino\.best\/[^"]+)"/);
                         if (match && match[1]) {
                             Lampa.Loading.start();
@@ -49,35 +51,31 @@
                                     });
                                 } else { Lampa.Noty.show('Плеєр не знайдено'); }
                             });
-                        } else { Lampa.Noty.show('На сайті uakino нічого не знайдено'); }
+                        } else { Lampa.Noty.show('Фільм не знайдено на сайті'); }
                     }, function() {
                         Lampa.Loading.stop();
-                        Lampa.Noty.show('Помилка мережі');
+                        Lampa.Noty.show('Помилка запиту');
                     });
                 });
 
-                // --- НОВЕ МІСЦЕ ВСТАВКИ ДЛЯ LAMPA 7 ---
-                // Шукаємо контейнер, де лежать кнопки (Дивитись, Закладки тощо)
-                var container = render[0].querySelector('.full-start__buttons');
-                
+                // Знаходимо блок кнопок (де "Дивитись", "Закладки")
+                var container = html_node.querySelector('.full-start__buttons');
                 if (container) {
-                    // Вставляємо ПІСЛЯ кнопки "Дивитись" (вона зазвичай перша)
                     container.appendChild(btn);
-                    
-                    // Оновлюємо навігацію пульта, щоб він бачив нову кнопку
+                    // Оновлюємо пульт
                     if (Lampa.Controller.update) Lampa.Controller.update();
                 }
             }
         });
     };
 
-    // Очікування готовності Lampa
-    var wait = setInterval(function () {
+    // Безпечний запуск
+    var interval = setInterval(function () {
         if (typeof Lampa !== 'undefined') {
-            clearInterval(wait);
+            clearInterval(interval);
             try {
                 start();
-            } catch (e) { }
+            } catch (err) { }
         }
     }, 500);
 })();
