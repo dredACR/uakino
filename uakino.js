@@ -31,7 +31,10 @@
                     network.native(iframe[1], function (p_html) {
                         var video = p_html.match(/file:'(.*?)'/);
                         if (video) callback(video[1]);
-                    });
+                        else Lampa.Noty.show('Файл відео не знайдено');
+                    }, function() { Lampa.Noty.show('Помилка плеєра Ashdi'); });
+                } else {
+                    Lampa.Noty.show('Плеєр не знайдено на сторінці');
                 }
             });
         };
@@ -44,11 +47,11 @@
             if (e.type == 'complite') {
                 var render = e.object.render();
                 
-                // Якщо кнопка вже є, не додаємо другу
+                // Перевірка на дублікат кнопки
                 if (render.find('.view--uakino').length > 0) return;
 
-                // Створюємо кнопку
-                var btn = $('<div class="full-start__button selector view--uakino"><span>UAKino</span></div>');
+                // Створення кнопки з примусовим стилем для видимості
+                var btn = $('<div class="full-start__button selector view--uakino" style="margin-bottom: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; cursor: pointer;"><span style="color: #4cd964; font-weight: bold;">UAKino (UA)</span></div>');
 
                 btn.on('hover:enter', function () {
                     var title = e.data.movie.title || e.data.movie.name;
@@ -57,7 +60,7 @@
                         Lampa.Loading.stop();
                         if (res.length) {
                             Lampa.Select.show({
-                                title: 'UAKino: ' + title,
+                                title: 'Результати UAKino',
                                 items: res,
                                 onSelect: function(item) {
                                     Lampa.Loading.start();
@@ -66,40 +69,52 @@
                                         Lampa.Player.play({ url: url, title: item.title });
                                     });
                                 },
-                                onBack: function() { Lampa.Controller.toggle('full_start'); }
+                                onBack: function() { 
+                                    Lampa.Controller.toggle('full_start'); 
+                                }
                             });
                         } else {
-                            Lampa.Noty.show('Нічого не знайдено на UAKino');
+                            Lampa.Noty.show('Нічого не знайдено');
                         }
                     });
                 });
 
-                // --- СПРОБА ВСТАВИТИ В РІЗНІ МІСЦЯ ---
-                var footer = render.find('.full-start__buttons'); // Стандартне місце
-                if (footer.length > 0) {
-                    footer.append(btn);
-                } else {
-                    // Якщо стандартне місце не знайдене, ліпимо в кінець опису
-                    render.find('.full-descr').append(btn);
+                // --- ПОШУК КОНТЕЙНЕРА ДЛЯ ВСТАВКИ ---
+                // Пробуємо різні класи, які використовуються в різних версіях Lampa
+                var targets = [
+                    render.find('.full-start__buttons'), 
+                    render.find('.full-descr__buttons'),
+                    render.find('.full-info'),
+                    render.find('.full-descr')
+                ];
+
+                var success = false;
+                for (var i = 0; i < targets.length; i++) {
+                    if (targets[i].length > 0) {
+                        targets[i].append(btn);
+                        success = true;
+                        break; 
+                    }
                 }
-                
-                // Оновлюємо контролер, щоб Lampa побачила нову кнопку
-                if(Lampa.Controller.enabled().name == 'full_start') {
+
+                // Якщо кнопка додана, оновлюємо навігацію
+                if (success) {
                     Lampa.Controller.toggle('full_start');
                 }
             }
         });
     }
 
-    // Чекаємо завантаження Lampa
+    // Очікування завантаження Lampa
     var wait = setInterval(function() {
         if (typeof Lampa !== 'undefined' && Lampa.Listener) {
             clearInterval(wait);
             try {
                 start();
-                // Повідомлення для тесту (потім видалимо)
-                Lampa.Noty.show('UAKino готовий до роботи');
-            } catch(e) { console.error(e); }
+                console.log('UAKino Plugin Started Successfully');
+            } catch(e) { 
+                console.error('UAKino Start Error:', e); 
+            }
         }
     }, 500);
 })();
