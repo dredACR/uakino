@@ -1,12 +1,12 @@
 (function () {
     'use strict';
 
-    function startPlugin() {
+    function UAKinoPlugin() {
         var network = new Lampa.Reguest();
         var base_url = 'https://uakino.best/';
 
-        // Функція пошуку
-        function search(query, callback) {
+        // Функція пошуку на сайті
+        this.search = function (query, callback) {
             var url = base_url + 'index.php?do=search&subaction=search&story=' + encodeURIComponent(query);
             network.native(url, function (html) {
                 var items = [];
@@ -21,10 +21,10 @@
                 });
                 callback(items);
             }, function () { callback([]); });
-        }
+        };
 
-        // Функція витягування відео
-        function extract(movie_url, callback) {
+        // Витягування прямого посилання на відео
+        this.extract = function (movie_url, callback) {
             network.native(movie_url, function (html) {
                 var iframe = html.match(/src="(https:\/\/ashdi\.vip\/vod\/[^"]+)"/);
                 if (iframe) {
@@ -34,32 +34,38 @@
                     });
                 }
             });
-        }
+        };
+    }
 
-        // Слухаємо відкриття картки фільму
+    function start() {
+        var uakino = new UAKinoPlugin();
+
+        // ІНТЕГРАЦІЯ ЯК ДЖЕРЕЛО (Найбільш стабільний метод)
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
+                // Додаємо вкладку в горизонтальне меню (де "Відео", "Деталі")
                 var render = e.object.render();
-                
-                if (render.find('.view--uakino').length > 0) return;
+                var title = e.data.movie.title || e.data.movie.name;
 
-                // Створюємо кнопку через стандартний клас Lampa
-                var btn = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
+                // Створюємо елемент меню
+                var item = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
 
-                btn.on('hover:enter', function () {
-                    var title = e.data.movie.title || e.data.movie.name;
+                item.on('hover:enter', function () {
                     Lampa.Loading.start();
-                    search(title, function (res) {
+                    uakino.search(title, function (results) {
                         Lampa.Loading.stop();
-                        if (res.length > 0) {
+                        if (results.length > 0) {
                             Lampa.Select.show({
-                                title: 'UAKino: ' + title,
-                                items: res,
-                                onSelect: function (item) {
+                                title: 'Результати UAKino',
+                                items: results,
+                                onSelect: function (res) {
                                     Lampa.Loading.start();
-                                    extract(item.url, function (url) {
+                                    uakino.extract(res.url, function (video_url) {
                                         Lampa.Loading.stop();
-                                        Lampa.Player.play({ url: url, title: item.title });
+                                        Lampa.Player.play({
+                                            url: video_url,
+                                            title: res.title
+                                        });
                                     });
                                 },
                                 onBack: function() {
@@ -67,32 +73,28 @@
                                 }
                             });
                         } else {
-                            Lampa.Noty.show('Нічого не знайдено');
+                            Lampa.Noty.show('На UAKino нічого не знайдено');
                         }
                     });
                 });
 
-                // Вставка кнопки з невеликою затримкою для Sharp TV
+                // СИЛОВА ВСТАВКА: Додаємо в панель кнопок або в початок сторінки
+                // Якщо Sharp блокує кнопки, ми додаємо ПЕРЕД описом
                 setTimeout(function() {
-                    var container = render.find('.full-start__buttons');
-                    if (container.length > 0) {
-                        container.append(btn);
-                        Lampa.Controller.toggle('full_start');
+                    var footer = render.find('.full-start__buttons');
+                    if (footer.length > 0) {
+                        footer.prepend(item);
+                    } else {
+                        render.find('.full-descr').prepend(item);
                     }
-                }, 1000);
+                    Lampa.Controller.toggle('full_start');
+                }, 1500);
             }
         });
     }
 
-    // Запуск плагіна
     if (window.Lampa) {
-        startPlugin();
-    } else {
-        var timer = setInterval(function() {
-            if (window.Lampa) {
-                clearInterval(timer);
-                startPlugin();
-            }
-        }, 200);
+        Lampa.Noty.show('UAKino активовано');
+        start();
     }
 })();
