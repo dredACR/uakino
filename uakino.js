@@ -1,10 +1,10 @@
 (function () {
     'use strict';
 
-    // Повідомлення для Google TV
+    // Повідомлення про запуск
     setTimeout(function() {
-        if (window.Lampa) Lampa.Noty.show('UAKino: Шукаю будь-яке місце для кнопки...');
-    }, 2000);
+        if (window.Lampa) Lampa.Noty.show('UAKino: Додано в головне меню!');
+    }, 3000);
 
     function UAKinoPlugin() {
         var network = new Lampa.Reguest();
@@ -44,52 +44,58 @@
     function start() {
         var uakino = new UAKinoPlugin();
 
-        Lampa.Listener.follow('full', function (e) {
-            if (e.type == 'complite') {
-                var render = e.object.render();
-                
-                var inject = function() {
-                    if (render.find('.view--uakino').length > 0) return;
-
-                    // Створюємо кнопку, яка ПОВИННА виділятися
-                    var btn = $('<div class="full-start__button selector view--uakino" style="background: #e67e22 !important; border: 2px solid #fff !important; margin: 10px !important; padding: 10px !important; display: inline-block !important;"><span>UAKINO (UA)</span></div>');
-
-                    btn.on('hover:enter', function () {
-                        var title = e.data.movie.title || e.data.movie.name;
-                        Lampa.Loading.start();
-                        uakino.search(title, function(res) {
-                            Lampa.Loading.stop();
-                            if (res.length) {
+        // 1. ДОДАВАННЯ В ГОЛОВНЕ МЕНЮ (Зліва)
+        Lampa.Component.add('uakino_menu', function(object){
+            var comp = new Lampa.InteractionMain(object);
+            
+            comp.create = function(){
+                this.activity.loader(true);
+                // Тут можна зробити вивід останніх новинок, але поки зробимо просто запуск пошуку
+                Lampa.Input.edit({
+                    value: '',
+                    title: 'Пошук на UAKino'
+                }, function(value){
+                    if(value){
+                        uakino.search(value, function(res){
+                            comp.activity.loader(false);
+                            if(res.length){
                                 Lampa.Select.show({
-                                    title: 'UAKino: ' + title,
+                                    title: 'Результати для: ' + value,
                                     items: res,
-                                    onSelect: function(item) {
+                                    onSelect: function(item){
                                         Lampa.Loading.start();
-                                        uakino.extract(item.url, function(url) {
+                                        uakino.extract(item.url, function(url){
                                             Lampa.Loading.stop();
                                             Lampa.Player.play({ url: url, title: item.title });
                                         });
-                                    },
-                                    onBack: function() { Lampa.Controller.toggle('full_start'); }
+                                    }
                                 });
                             } else Lampa.Noty.show('Нічого не знайдено');
                         });
+                    } else Lampa.Activity.backward();
+                });
+            };
+            return comp;
+        });
+
+        // Додаємо пункт "UAKino" у список меню
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type == 'ready') {
+                var menu_item = $('<li class="menu__item selector" data-action="uakino">' +
+                    '<div class="menu__ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg></div>' +
+                    '<div class="menu__text">UAKino</div>' +
+                '</li>');
+
+                menu_item.on('hover:enter', function () {
+                    Lampa.Activity.push({
+                        url: '',
+                        title: 'UAKino',
+                        component: 'uakino_menu',
+                        page: 1
                     });
+                });
 
-                    // ШУКАЄМО БУДЬ-ЯКУ КНОПКУ НА ЕКРАНІ
-                    var anyButton = render.find('.selector').first();
-                    
-                    if (anyButton.length > 0) {
-                        anyButton.before(btn); // Ставимо перед першою ж знайденою кнопкою
-                        Lampa.Controller.toggle('full_start');
-                    } else {
-                        // Якщо взагалі не знайшли кнопок, кидаємо в самий верх сторінки
-                        render.prepend(btn);
-                    }
-                };
-
-                // Чекаємо 1.5 секунди, поки TV відрендерить сторінку повністю
-                setTimeout(inject, 1500);
+                $('.menu .menu__list').append(menu_item);
             }
         });
     }
