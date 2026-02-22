@@ -1,12 +1,12 @@
 (function () {
     'use strict';
 
-    function UAKinoPlugin(components) {
+    function UAKinoPlugin() {
         var network = new Lampa.Reguest();
         var base_url = 'https://uakino.best/';
 
-        // Функція для пошуку на сайті
-        this.search = function (object, query, callback) {
+        // 1. Пошук фільму на сайті
+        this.search = function (query, callback) {
             var url = base_url + 'index.php?do=search&subaction=search&story=' + encodeURIComponent(query);
             
             network.native(url, function (html) {
@@ -14,15 +14,16 @@
                 var cards = $(html).find('.movie-item');
 
                 cards.each(function () {
+                    var a = $(this).find('a').first();
                     var img = $(this).find('img').attr('src');
-                    var link = $(this).find('a').attr('href');
-                    var title = $(this).find('.movie-title').text() || $(this).find('a').attr('title');
+                    var title = $(this).find('.movie-title').text() || a.attr('title');
+                    var link = a.attr('href');
                     
                     if (link) {
                         items.push({
                             title: title,
                             url: link,
-                            img: img.indexOf('http') === -1 ? base_url + img : img
+                            img: img && img.indexOf('http') === -1 ? base_url + img : img
                         });
                     }
                 });
@@ -32,83 +33,91 @@
             });
         };
 
-        // Функція для витягування прямого посилання на відео
+        // 2. Витяг прямого посилання на відео
         this.extract = function (movie_url, callback) {
             network.native(movie_url, function (html) {
-                // Шукаємо iframe Ashdi
                 var iframe_match = html.match(/src="(https:\/\/ashdi\.vip\/vod\/[^"]+)"/);
                 
                 if (iframe_match && iframe_match[1]) {
-                    var iframe_url = iframe_match[1];
-                    
-                    network.native(iframe_url, function (player_html) {
-                        // Витягуємо пряме посилання на m3u8
+                    network.native(iframe_match[1], function (player_html) {
                         var video_match = player_html.match(/file:'(.*?)'/);
                         if (video_match && video_match[1]) {
                             callback(video_match[1]);
                         } else {
-                            Lampa.Noty.show('Відео не знайдено в плеєрі');
+                            Lampa.Noty.show('Відеофайл не знайдено');
+                            Lampa.Loading.stop();
                         }
                     }, function() {
-                        Lampa.Noty.show('Помилка доступу до Ashdi');
+                        Lampa.Noty.show('Помилка доступу до плеєра');
+                        Lampa.Loading.stop();
                     });
                 } else {
-                    Lampa.Noty.show('Плеєр не знайдено на сторінці');
+                    Lampa.Noty.show('Плеєр Ashdi не знайдено');
+                    Lampa.Loading.stop();
                 }
             });
         };
     }
 
-    // Ініціалізація плагіна в Lampa
+    // Головна функція ініціалізації
     function startPlugin() {
         var uakino = new UAKinoPlugin();
 
-        // Додаємо кнопку "UAKino" в картку фільму
+        // Слухаємо відкриття картки фільму
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
-                var btn = $('<div class="full-start__button selector"><span>UAKino</span></div>');
+                var render = e.object.render();
+                
+                // Перевіряємо, чи ми не додали кнопку вже раніше
+                if ($('.view--uakino', render).length > 0) return;
+
+                // Створюємо кнопку
+                var btn = $('<div class="full-start__button selector view--uakino"><span>UAKino</span></div>');
                 
                 btn.on('hover:enter', function () {
                     var search_query = e.data.movie.title || e.data.movie.name;
                     
-                    Lampa.Select.show({
-                        title: 'Пошук на UAKino',
-                        items: [{title: 'Шукати: ' + search_query}],
-                        onSelect: function() {
-                            Lampa.Loading.start();
-                            uakino.search(e.data, search_query, function(results) {
-                                Lampa.Loading.stop();
-                                if (results.length > 0) {
-                                    Lampa.Select.show({
-                                        title: 'Результати',
-                                        items: results,
-                                        onSelect: function(item) {
-                                            Lampa.Loading.start();
-                                            uakino.extract(item.url, function(video_url) {
-                                                Lampa.Loading.stop();
-                                                Lampa.Player.play({
-                                                    url: video_url,
-                                                    title: item.title
-                                                });
-                                            });
-                                        }
+                    Lampa.Loading.start();
+                    
+                    uakino.search(search_query, function(results) {
+                        Lampa.Loading.stop();
+                        
+                        if (results.length > 0) {
+                            Lampa.Select.show({
+                                title: 'Результати UAKino',
+                                items: results,
+                                onSelect: function(item) {
+                                    Lampa.Loading.start();
+                                    uakino.extract(item.url, function(video_url) {
+                                        Lampa.Loading.stop();
+                                        Lampa.Player.play({
+                                            url: video_url,
+                                            title: item.title
+                                        });
                                     });
-                                } else {
-                                    Lampa.Noty.show('Нічого не знайдено');
+                                },
+                                onBack: function() {
+                                    Lampa.Controller.toggle('full_start');
                                 }
                             });
+                        } else {
+                            Lampa.Noty.show('На UAKino нічого не знайдено');
                         }
                     });
                 });
 
-                $('.full-start__buttons', e.object.render()).append(btn);
+                // Додаємо кнопку в блок кнопок
+                $('.full-start__buttons', render).append(btn);
             }
         });
     }
 
-    if (window.appready) startPlugin();
-    else Lampa.Listener.follow('app', function (e) {
-        if (e.type == 'ready') startPlugin();
-    });
+    // Надійний запуск через інтервал
+    var waitLampa = setInterval(function() {
+        if (typeof Lampa !== 'undefined' && Lampa.Listener) {
+            clearInterval(waitLampa);
+            startPlugin();
+        }
+    }, 200);
 
 })();
