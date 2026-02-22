@@ -5,99 +5,75 @@
         var network = new Lampa.Reguest();
         var base_url = 'https://uakino.best/';
 
-        // Реєструємо компонент
-        Lampa.Component.add('uakino_source', function (object) {
-            var comp = new Lampa.InteractionMain(object);
-
-            comp.create = function () {
-                var _this = this;
-                this.activity.loader(true);
-
-                var query = object.search_query || (object.movie ? (object.movie.title || object.movie.name) : '');
-                var url = base_url + 'index.php?do=search&subaction=search&story=' + encodeURIComponent(query);
-
-                network.native(url, function (html) {
-                    var items = [];
-                    $(html).find('.movie-item').each(function () {
-                        var a = $(this).find('a').first();
-                        if (a.attr('href')) {
-                            items.push({
-                                title: $(this).find('.movie-title').text() || a.attr('title'),
-                                url: a.attr('href')
-                            });
-                        }
+        // Функція для пошуку відео
+        function getUAKinoVideo(title, callback) {
+            var url = base_url + 'index.php?do=search&subaction=search&story=' + encodeURIComponent(title);
+            network.native(url, function (html) {
+                var iframe = html.match(/src="(https:\/\/ashdi\.vip\/vod\/[^"]+)"/);
+                if (iframe) {
+                    network.native(iframe[1], function (v_html) {
+                        var video = v_html.match(/file:'(.*?)'/);
+                        if (video) callback(video[1]);
+                        else Lampa.Noty.show('Відео не знайдено');
                     });
+                } else {
+                    Lampa.Noty.show('Фільм не знайдено на UAKino');
+                }
+            }, function() {
+                Lampa.Noty.show('Помилка мережі UAKino');
+            });
+        }
 
-                    _this.activity.loader(false);
-
-                    if (items.length > 0) {
-                        Lampa.Select.show({
-                            title: 'Результати UAKino',
-                            items: items,
-                            onSelect: function (item) {
-                                Lampa.Loading.start();
-                                network.native(item.url, function (p_html) {
-                                    var iframe = p_html.match(/src="(https:\/\/ashdi\.vip\/vod\/[^"]+)"/);
-                                    if (iframe) {
-                                        network.native(iframe[1], function (v_html) {
-                                            var video = v_html.match(/file:'(.*?)'/);
-                                            Lampa.Loading.stop();
-                                            if (video) {
-                                                Lampa.Player.play({ url: video[1], title: item.title });
-                                            }
-                                        });
-                                    } else Lampa.Loading.stop();
-                                });
-                            },
-                            onBack: function () {
-                                Lampa.Activity.backward();
-                            }
-                        });
-                    } else {
-                        Lampa.Noty.show('Нічого не знайдено');
-                        Lampa.Activity.backward();
-                    }
-                }, function () {
-                    _this.activity.loader(false);
-                    Lampa.Noty.show('Помилка мережі');
-                    Lampa.Activity.backward();
-                });
-
-                return this.render();
-            };
-            return comp;
-        });
-
-        // ПРИМУСОВА ВСТАВКА В КАРТКУ (Android APK Method)
+        // Додаємо кнопку через Listener
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
-                var btn = $('<div class="full-start__button selector view--uakino" style="background: #3e0a0a !important;"><span>UAKino (UA)</span></div>');
+                var render = e.object.render();
                 
+                // Перевірка чи вже є кнопка
+                if (render.find('.view--uakino').length > 0) return;
+
+                // Створюємо кнопку (без складних стилів, щоб не було помилок)
+                var btn = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
+
                 btn.on('hover:enter', function () {
-                    Lampa.Activity.push({
-                        url: '',
-                        title: 'UAKino',
-                        component: 'uakino_source',
-                        movie: e.data.movie,
-                        page: 1
+                    var title = e.data.movie.title || e.data.movie.name;
+                    Lampa.Loading.start();
+                    
+                    getUAKinoVideo(title, function(url) {
+                        Lampa.Loading.stop();
+                        Lampa.Player.play({
+                            url: url,
+                            title: title
+                        });
                     });
                 });
 
-                // Чекаємо і вставляємо ПЕРЕД усіма кнопками
-                setTimeout(function(){
-                    var container = $('.full-start__buttons', e.object.render());
-                    if (container.length > 0) {
-                        container.prepend(btn);
-                        // Оновлюємо навігацію для Sharp TV
-                        Lampa.Controller.toggle('full_start');
-                    }
-                }, 2000);
+                // Вставка в блок кнопок
+                var container = render.find('.full-start__buttons');
+                if (container.length > 0) {
+                    container.append(btn);
+                    // Важливо для Android TV: оновлюємо навігацію пульта
+                    Lampa.Controller.add('full_start', {
+                        toggle: function() {},
+                        up: function() {},
+                        down: function() {},
+                        enter: function() {}
+                    });
+                }
             }
         });
     }
 
-    if (window.Lampa) {
-        Lampa.Noty.show('UAKino v3.1.6: Натисніть кнопку під назвою');
-        start();
+    // Безпечний запуск
+    try {
+        if (window.Lampa) {
+            start();
+        } else {
+            Lampa.Listener.follow('app', function (e) {
+                if (e.type == 'ready') start();
+            });
+        }
+    } catch (err) {
+        console.error("UAKino Error: ", err);
     }
 })();
