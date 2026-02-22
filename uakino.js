@@ -1,9 +1,9 @@
 (function () {
     'use strict';
 
-    // Повідомлення для перевірки
+    // Повідомлення для перевірки, що плагін хоча б завантажився
     setTimeout(function() {
-        if (window.Lampa) Lampa.Noty.show('UAKino: Затисніть ОК і шукайте пункт у списку!');
+        if (window.Lampa) Lampa.Noty.show('UAKino: Плагін активний. Шукайте в картці фільму!');
     }, 3000);
 
     function UAKinoPlugin() {
@@ -14,7 +14,8 @@
             var url = base_url + 'index.php?do=search&subaction=search&story=' + encodeURIComponent(query);
             network.native(url, function (html) {
                 var items = [];
-                $(html).find('.movie-item').each(function () {
+                var cards = $(html).find('.movie-item');
+                cards.each(function () {
                     var a = $(this).find('a').first();
                     if (a.attr('href')) {
                         items.push({
@@ -43,47 +44,56 @@
     function start() {
         var uakino = new UAKinoPlugin();
 
-        // Функція для виконання пошуку та запуску
-        var runAction = function(data) {
-            var title = data.movie.title || data.movie.name;
-            Lampa.Loading.start();
-            uakino.search(title, function (res) {
-                Lampa.Loading.stop();
-                if (res.length) {
-                    Lampa.Select.show({
-                        title: 'UAKino: ' + title,
-                        items: res,
-                        onSelect: function (item) {
-                            Lampa.Loading.start();
-                            uakino.extract(item.url, function (url) {
-                                Lampa.Loading.stop();
-                                Lampa.Player.play({ url: url, title: item.title });
+        // Перехоплюємо побудову сторінки фільму
+        Lampa.Listener.follow('full', function (e) {
+            if (e.type == 'complite') {
+                var render = e.object.render();
+                
+                // Якщо кнопка вже є - виходимо
+                if ($('.view--uakino', render).length > 0) return;
+
+                // Створюємо кнопку через стандартний метод Lampa
+                var btn = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
+
+                btn.on('hover:enter', function () {
+                    var title = e.data.movie.title || e.data.movie.name;
+                    Lampa.Loading.start();
+                    uakino.search(title, function (res) {
+                        Lampa.Loading.stop();
+                        if (res.length) {
+                            Lampa.Select.show({
+                                title: 'Результати UAKino',
+                                items: res,
+                                onSelect: function (item) {
+                                    Lampa.Loading.start();
+                                    uakino.extract(item.url, function (url) {
+                                        Lampa.Loading.stop();
+                                        Lampa.Player.play({ url: url, title: item.title });
+                                    });
+                                },
+                                onBack: function() {
+                                    Lampa.Controller.toggle('full_start');
+                                }
                             });
-                        },
-                        onBack: function() {
-                             Lampa.Controller.toggle('context_menu'); // Повертаємо фокус у меню
-                        }
+                        } else Lampa.Noty.show('Нічого не знайдено');
                     });
-                } else Lampa.Noty.show('На UAKino нічого не знайдено');
-            });
-        };
-
-        // Слідкуємо за відкриттям КОНТЕКСТНОГО МЕНЮ
-        Lampa.Listener.follow('contextmenu', function (e) {
-            // Додаємо наш пункт у масив меню, який Lampa збирається малювати
-            if (e.menu) {
-                e.menu.push({
-                    title: 'Дивитися на UAKino (UA)',
-                    subtitle: 'Українська озвучка',
-                    action: 'uakino_play'
                 });
-            }
-        });
 
-        // Слухаємо клік по нашому пункту в меню
-        Lampa.Listener.follow('contextmenu', function (e) {
-            if (e.action == 'uakino_play') {
-                runAction(e.data);
+                // --- СИЛОВИЙ МЕТОД ВСТАВКИ ДЛЯ GOOGLE TV ---
+                // Ми будемо кожну секунду перевіряти, чи з'явився блок кнопок, 
+                // і вставимо кнопку, як тільки він буде готовий.
+                var interval = setInterval(function() {
+                    var buttons_block = render.find('.full-start__buttons');
+                    if (buttons_block.length > 0) {
+                        clearInterval(interval);
+                        buttons_block.append(btn);
+                        // Оновлюємо навігацію
+                        Lampa.Controller.toggle('full_start');
+                    }
+                }, 100);
+
+                // Зупиняємо через 5 секунд, щоб не навантажувати ТВ
+                setTimeout(function() { clearInterval(interval); }, 5000);
             }
         });
     }
