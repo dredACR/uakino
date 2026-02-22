@@ -1,8 +1,9 @@
 (function () {
     'use strict';
 
+    // Повідомлення для перевірки
     setTimeout(function() {
-        if (window.Lampa) Lampa.Noty.show('UAKino: Знайдено! Шукайте кнопку під постером');
+        if (window.Lampa) Lampa.Noty.show('UAKino: Шукайте вкладку зверху поруч із "Відео"');
     }, 3000);
 
     function UAKinoPlugin() {
@@ -43,15 +44,15 @@
     function start() {
         var uakino = new UAKinoPlugin();
 
+        // Слухаємо побудову сторінки фільму
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
                 var render = e.object.render();
-                if (render.find('.view--uakino').length > 0) return;
+                
+                // Створюємо нову вкладку
+                var tab = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
 
-                // Створюємо кнопку з яскравим стилем
-                var btn = $('<div class="full-start__button selector view--uakino" style="background: #1a73e8 !important; border-radius: 5px; margin-top: 10px; width: 100%; display: block; text-align: center;"><span style="font-weight: bold; color: #fff;">ДИВИТИСЯ НА UAKINO</span></div>');
-
-                btn.on('hover:enter', function () {
+                tab.on('hover:enter', function () {
                     var title = e.data.movie.title || e.data.movie.name;
                     Lampa.Loading.start();
                     uakino.search(title, function(res) {
@@ -67,31 +68,24 @@
                                         Lampa.Player.play({ url: url, title: item.title });
                                     });
                                 },
-                                onBack: function() { Lampa.Controller.toggle('full_start'); }
+                                onBack: function() { 
+                                    Lampa.Controller.toggle('full_start'); 
+                                }
                             });
                         } else Lampa.Noty.show('Нічого не знайдено');
                     });
                 });
 
-                // --- НОВИЙ МЕТОД ВСТАВКИ ---
-                // Шукаємо постер або ліву колонку
-                var left_col = render.find('.full-poster'); 
-                if (left_col.length == 0) left_col = render.find('.full-start__poster');
+                // ВСТАВЛЯЄМО ВЕРХНЮ КНОПКУ (НАЙНАДІЙНІШЕ)
+                // Шукаємо блок з головними кнопками ("Дивитись", "Трейлер")
+                var container = render.find('.full-start__buttons');
                 
-                if (left_col.length > 0) {
-                    left_col.append(btn); // Додаємо кнопку прямо під постер
+                if (container.length > 0) {
+                    container.prepend(tab); // Додаємо на самий початок
                 } else {
-                    // Якщо навіть постера немає, ліпимо в самий початок опису
-                    render.prepend(btn);
+                    // Якщо блоку немає, шукаємо будь-який селектор у верхній частині
+                    render.find('.selector').first().before(tab);
                 }
-
-                // Оновлюємо навігацію пульта
-                Lampa.Controller.add('full_start', {
-                    toggle: function() {},
-                    up: function() {},
-                    down: function() {},
-                    enter: function() {}
-                });
             }
         });
     }
