@@ -1,10 +1,10 @@
 (function () {
     'use strict';
 
-    // Повідомлення для перевірки
+    // Повідомлення для тесту
     setTimeout(function() {
-        if (window.Lampa) Lampa.Noty.show('UAKino: Шукайте вкладку зверху поруч із "Відео"');
-    }, 3000);
+        if (window.Lampa) Lampa.Noty.show('UAKino активовано для Google TV');
+    }, 2000);
 
     function UAKinoPlugin() {
         var network = new Lampa.Reguest();
@@ -44,48 +44,57 @@
     function start() {
         var uakino = new UAKinoPlugin();
 
-        // Слухаємо побудову сторінки фільму
+        // Функція вставки кнопки
+        var injectButton = function(render, movieData) {
+            if (render.find('.view--uakino').length > 0) return;
+
+            var btn = $('<div class="full-start__button selector view--uakino" style="background: #1a73e8 !important; border-radius: 5px; margin-right: 10px;"><span style="font-weight: bold;">UAKino (UA)</span></div>');
+
+            btn.on('hover:enter', function () {
+                var title = movieData.title || movieData.name;
+                Lampa.Loading.start();
+                uakino.search(title, function(res) {
+                    Lampa.Loading.stop();
+                    if (res.length) {
+                        Lampa.Select.show({
+                            title: 'UAKino: ' + title,
+                            items: res,
+                            onSelect: function(item) {
+                                Lampa.Loading.start();
+                                uakino.extract(item.url, function(url) {
+                                    Lampa.Loading.stop();
+                                    Lampa.Player.play({ url: url, title: item.title });
+                                });
+                            },
+                            onBack: function() { Lampa.Controller.toggle('full_start'); }
+                        });
+                    } else Lampa.Noty.show('Нічого не знайдено');
+                });
+            });
+
+            // Шукаємо блок кнопок
+            var container = render.find('.full-start__buttons');
+            if (container.length > 0) {
+                container.prepend(btn);
+                // Оновлюємо навігацію пульта
+                Lampa.Controller.toggle('full_start');
+            }
+        };
+
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
                 var render = e.object.render();
                 
-                // Створюємо нову вкладку
-                var tab = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
+                // Чекаємо появи кнопок (для повільних TV)
+                var timer = setInterval(function(){
+                    if (render.find('.full-start__buttons').length > 0) {
+                        clearInterval(timer);
+                        injectButton(render, e.data.movie);
+                    }
+                }, 500);
 
-                tab.on('hover:enter', function () {
-                    var title = e.data.movie.title || e.data.movie.name;
-                    Lampa.Loading.start();
-                    uakino.search(title, function(res) {
-                        Lampa.Loading.stop();
-                        if (res.length) {
-                            Lampa.Select.show({
-                                title: 'UAKino: ' + title,
-                                items: res,
-                                onSelect: function(item) {
-                                    Lampa.Loading.start();
-                                    uakino.extract(item.url, function(url) {
-                                        Lampa.Loading.stop();
-                                        Lampa.Player.play({ url: url, title: item.title });
-                                    });
-                                },
-                                onBack: function() { 
-                                    Lampa.Controller.toggle('full_start'); 
-                                }
-                            });
-                        } else Lampa.Noty.show('Нічого не знайдено');
-                    });
-                });
-
-                // ВСТАВЛЯЄМО ВЕРХНЮ КНОПКУ (НАЙНАДІЙНІШЕ)
-                // Шукаємо блок з головними кнопками ("Дивитись", "Трейлер")
-                var container = render.find('.full-start__buttons');
-                
-                if (container.length > 0) {
-                    container.prepend(tab); // Додаємо на самий початок
-                } else {
-                    // Якщо блоку немає, шукаємо будь-який селектор у верхній частині
-                    render.find('.selector').first().before(tab);
-                }
+                // На всяк випадок зупиняємо пошук через 10 секунд
+                setTimeout(function(){ clearInterval(timer); }, 10000);
             }
         });
     }
