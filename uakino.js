@@ -5,7 +5,6 @@
         var network = new Lampa.Reguest();
         var base_url = 'https://uakino.best/';
 
-        // Функція пошуку на сайті
         this.search = function (query, callback) {
             var url = base_url + 'index.php?do=search&subaction=search&story=' + encodeURIComponent(query);
             network.native(url, function (html) {
@@ -23,7 +22,6 @@
             }, function () { callback([]); });
         };
 
-        // Витягування прямого посилання на відео
         this.extract = function (movie_url, callback) {
             network.native(movie_url, function (html) {
                 var iframe = html.match(/src="(https:\/\/ashdi\.vip\/vod\/[^"]+)"/);
@@ -40,32 +38,28 @@
     function start() {
         var uakino = new UAKinoPlugin();
 
-        // ІНТЕГРАЦІЯ ЯК ДЖЕРЕЛО (Найбільш стабільний метод)
+        // РЕЄСТРАЦІЯ ЯК ОКРЕМОГО ПУНКТУ В КАРТЦІ
         Lampa.Listener.follow('full', function (e) {
             if (e.type == 'complite') {
-                // Додаємо вкладку в горизонтальне меню (де "Відео", "Деталі")
                 var render = e.object.render();
                 var title = e.data.movie.title || e.data.movie.name;
 
-                // Створюємо елемент меню
-                var item = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
+                // Створюємо кнопку через офіційні класи Lampa для Google TV
+                var btn = $('<div class="full-start__button selector view--uakino"><span>UAKino (UA)</span></div>');
 
-                item.on('hover:enter', function () {
+                btn.on('hover:enter', function () {
                     Lampa.Loading.start();
-                    uakino.search(title, function (results) {
+                    uakino.search(title, function (res) {
                         Lampa.Loading.stop();
-                        if (results.length > 0) {
+                        if (res.length > 0) {
                             Lampa.Select.show({
-                                title: 'Результати UAKino',
-                                items: results,
-                                onSelect: function (res) {
+                                title: 'UAKino: ' + title,
+                                items: res,
+                                onSelect: function (item) {
                                     Lampa.Loading.start();
-                                    uakino.extract(res.url, function (video_url) {
+                                    uakino.extract(item.url, function (url) {
                                         Lampa.Loading.stop();
-                                        Lampa.Player.play({
-                                            url: video_url,
-                                            title: res.title
-                                        });
+                                        Lampa.Player.play({ url: url, title: item.title });
                                     });
                                 },
                                 onBack: function() {
@@ -78,23 +72,28 @@
                     });
                 });
 
-                // СИЛОВА ВСТАВКА: Додаємо в панель кнопок або в початок сторінки
-                // Якщо Sharp блокує кнопки, ми додаємо ПЕРЕД описом
-                setTimeout(function() {
-                    var footer = render.find('.full-start__buttons');
-                    if (footer.length > 0) {
-                        footer.prepend(item);
-                    } else {
-                        render.find('.full-descr').prepend(item);
-                    }
-                    Lampa.Controller.toggle('full_start');
-                }, 1500);
+                // Шукаємо місце для вставки. Якщо немає кнопок, вставляємо в меню вкладок
+                var container = render.find('.full-start__buttons');
+                if (container.length > 0) {
+                    container.append(btn);
+                } else {
+                    // Метод для Lampa Lite / Google TV: додаємо в панель вкладок
+                    render.find('.full-tabs').append(btn);
+                }
+                
+                // Оновлюємо контролер
+                Lampa.Controller.toggle('full_start');
             }
         });
     }
 
-    if (window.Lampa) {
-        Lampa.Noty.show('UAKino активовано');
-        start();
-    }
+    // Чекаємо повної готовності Lampa
+    var wait = setInterval(function() {
+        if (typeof Lampa !== 'undefined' && Lampa.Listener) {
+            clearInterval(wait);
+            start();
+            // Повідомлення з'явиться точно, якщо плагін завантажився
+            Lampa.Noty.show('UAKino: Модуль активовано');
+        }
+    }, 500);
 })();
